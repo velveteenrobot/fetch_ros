@@ -379,7 +379,7 @@ public:
     ros::NodeHandle pnh(nh, name);
 
     // Button mapping
-    pnh.param("button_deadman", deadman_, 10);
+    // pnh.param("button_deadman", deadman_, 10);
     pnh.param("button_open", open_button_, 0);
     pnh.param("button_close", close_button_, 3);
 
@@ -573,31 +573,33 @@ public:
   {
     ros::NodeHandle pnh(nh, name);
 
-    pnh.param("axis_x", axis_x_, 3);
-    pnh.param("axis_y", axis_y_, 2);
-    pnh.param("axis_z", axis_z_, 1);
-    pnh.param("axis_roll", axis_roll_, 2);
-    pnh.param("axis_pitch", axis_pitch_, 3);
-    pnh.param("axis_yaw", axis_yaw_, 0);
+    pnh.param("/claw_teleop/axis_x", axis_x_, 5);
+    pnh.param("/claw_teleop/axis_y", axis_y_, 2);
+    pnh.param("/claw_teleop/axis_z", axis_z_, 1);
+    pnh.param("/claw_teleop/axis_roll", axis_roll_, 2);
+    pnh.param("/claw_teleop/axis_pitch", axis_pitch_, 3);
+    pnh.param("/claw_teleop/axis_yaw", axis_yaw_, 0);
 
-    pnh.param("button_deadman", deadman_, 10);
-    pnh.param("button_arm_linear", button_linear_, 9);
-    pnh.param("button_arm_angular", button_angular_, 11);
+    // TODO: set the vertical motion button
+    pnh.param("/claw_teleop/button_arm_vertical", deadman_, 0);
+    pnh.param("/claw_teleop/button_arm_linear", button_linear_, 0);
+    // TODO: set the rotation "deadman"
+    pnh.param("/claw_teleop/button_arm_angular", button_angular_, 11);
 
     // Twist limits
-    pnh.param("max_vel_x", max_vel_x_, 1.0);
-    pnh.param("max_vel_y", max_vel_y_, 1.0);
-    pnh.param("max_vel_z", max_vel_z_, 1.0);
-    pnh.param("max_acc_x", max_acc_x_, 10.0);
-    pnh.param("max_acc_y", max_acc_y_, 10.0);
-    pnh.param("max_acc_z", max_acc_z_, 10.0);
+    pnh.param("/claw_teleop/max_vel_x", max_vel_x_, 1.0);
+    pnh.param("/claw_teleop/max_vel_y", max_vel_y_, 1.0);
+    pnh.param("/claw_teleop/max_vel_z", max_vel_z_, 0.7);
+    pnh.param("/claw_teleop/max_acc_x", max_acc_x_, 10.0);
+    pnh.param("/claw_teleop/max_acc_y", max_acc_y_, 10.0);
+    pnh.param("/claw_teleop/max_acc_z", max_acc_z_, 7.0);
 
-    pnh.param("max_vel_roll", max_vel_roll_, 2.0);
-    pnh.param("max_vel_pitch", max_vel_pitch_, 2.0);
-    pnh.param("max_vel_yaw", max_vel_yaw_, 2.0);
-    pnh.param("max_acc_roll", max_acc_roll_, 10.0);
-    pnh.param("max_acc_pitch", max_acc_pitch_, 10.0);
-    pnh.param("max_acc_yaw", max_acc_yaw_, 10.0);
+    pnh.param("/claw_teleop/max_vel_roll", max_vel_roll_, 2.0);
+    pnh.param("/claw_teleop/max_vel_pitch", max_vel_pitch_, 2.0);
+    pnh.param("/claw_teleop/max_vel_yaw", max_vel_yaw_, 2.0);
+    pnh.param("/claw_teleop/max_acc_roll", max_acc_roll_, 10.0);
+    pnh.param("/claw_teleop/max_acc_pitch", max_acc_pitch_, 10.0);
+    pnh.param("/claw_teleop/max_acc_yaw", max_acc_yaw_, 10.0);
 
     cmd_pub_ = nh.advertise<geometry_msgs::TwistStamped>("/arm_controller/cartesian_twist/command", 10);
   }
@@ -605,11 +607,16 @@ public:
   virtual bool update(const sensor_msgs::Joy::ConstPtr& joy,
                       const sensor_msgs::JointState::ConstPtr& state)
   {
-    bool deadman_pressed = joy->buttons[deadman_];
+    // TODO: probably need to set this based on 1/-1 value for vertical button
+    bool button_vertical_pressed;
+    if (joy->buttons[button_vertical_] == 1 || joy->buttons[button_vertical_] == -1)
+    {
+        button_vertical_pressed = true;
+    }
     bool button_linear_pressed = joy->buttons[button_linear_];
     bool button_angular_pressed = joy->buttons[button_angular_];
 
-    if ((!(button_linear_pressed || button_angular_pressed) || !deadman_pressed) &&
+    if (!(button_linear_pressed || button_angular_pressed) &&
         (ros::Time::now() - last_update_ > ros::Duration(0.5)))
     {
       stop();
@@ -622,7 +629,7 @@ public:
     {
       desired_.twist.linear.x = joy->axes[axis_x_] * max_vel_x_;
       desired_.twist.linear.y = joy->axes[axis_y_] * max_vel_y_;
-      desired_.twist.linear.z = joy->axes[axis_z_] * max_vel_z_;
+      desired_.twist.linear.z = 0;
       desired_.twist.angular.x = 0.0;
       desired_.twist.angular.y = 0.0;
       desired_.twist.angular.z = 0.0;
@@ -630,6 +637,7 @@ public:
     }
     else if (button_angular_pressed)
     {
+      // TODO: just rotate wrist
       desired_.twist.linear.x = 0.0;
       desired_.twist.linear.y = 0.0;
       desired_.twist.linear.z = 0.0;
@@ -637,6 +645,16 @@ public:
       desired_.twist.angular.y = joy->axes[axis_pitch_] * max_vel_pitch_;
       desired_.twist.angular.z = joy->axes[axis_yaw_] * max_vel_yaw_;
       last_update_ = ros::Time::now();
+    }
+    else if (button_vertical_pressed)
+    {
+      // TODO: just move vetically
+      desired_.twist.linear.x = 0.0;
+      desired_.twist.linear.y = 0.0;
+      desired_.twist.angular.x = 0.0;
+      desired_.twist.angular.y = 0.0;
+      desired_.twist.angular.z = 0.0;
+      desired_.twist.linear.z = joy->buttons[button_vertical_] * max_vel_z_;
     }
     else
     {
@@ -695,7 +713,7 @@ private:
   // Buttons from params
   int deadman_;
   int axis_x_, axis_y_, axis_z_, axis_roll_, axis_pitch_, axis_yaw_;
-  int button_linear_, button_angular_;
+  int button_vertical_, button_linear_, button_angular_;
 
   // Limits from params
   double max_vel_x_, max_vel_y_, max_vel_z_;
